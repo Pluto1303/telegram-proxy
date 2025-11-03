@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 
 // Substitua pelo URL do seu Google Apps Script
-const SCRIPT_URL = https://script.google.com/home/projects/1pOYF3VowlNGo7Vc3A5aMCsblqgD48Y4wY4mWPT9DkDVQrOGW6l74KRXw/edit;
+const SCRIPT_URL = https://script.google.com/home/projects/1Ces_Vk3CUbW1SLW5vaynx-7Izbj0-rkfhpZ5jslffEQc0ma1PkrcSHDG/edit;
 
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", req.body);
