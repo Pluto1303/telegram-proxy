@@ -1,110 +1,99 @@
-// index.js
+// index.js — Bot Telegram + Jira Service Management Monitor
 import express from "express";
-import axios from "axios";
 import bodyParser from "body-parser";
+import axios from "axios";
 
 const app = express();
 app.use(bodyParser.json());
 
-// 🔐 Variáveis de ambiente
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const JIRA_EMAIL = process.env.JIRA_EMAIL;
-const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN;
+// ⚙️ Configurações principais
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8462588145:AAGRhcJ7eJimORSuvGue4B55i4-0KT_swBQ";
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-1001893986630";
+const JIRA_EMAIL = process.env.JIRA_EMAIL || "carlos.monteiro@grupomateus.com.br";
+const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || "SEU_TOKEN_API_AQUI";
+const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 
-const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
-const monitoredIssues = {}; // Armazena status atuais de cada chamado
+// 📦 Memória temporária (mantém os status dos chamados)
+const monitoredTickets = new Map();
 
-// 🧠 Função para consultar status do chamado via API REST do Jira
-async function getJiraIssueStatus(issueKey) {
+// 🧩 Função para enviar mensagem no Telegram
+async function sendTelegramMessage(text) {
+  await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    chat_id: TELEGRAM_CHAT_ID,
+    text,
+    parse_mode: "HTML",
+  });
+}
+
+// 🔍 Função para obter informações do chamado Jira (API do portal)
+async function getJiraTicketStatus(issueKey) {
   try {
-    const response = await axios.get(
-      `https://grupomateus.atlassian.net/rest/api/3/issue/${issueKey}`,
-      {
-        headers: {
-          Authorization: `Basic ${Buffer.from(
-            `${JIRA_EMAIL}:${JIRA_API_TOKEN}`
-          ).toString("base64")}`,
-          Accept: "application/json",
-        },
+    const issueUrl = `${JIRA_BASE_URL}/rest/servicedeskapi/request/${issueKey}`;
+    const response = await axios.get(issueUrl, {
+      headers: {
+        "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
+        "Accept": "application/json",
+        "X-Atlassian-Token": "no-check"
       }
-    );
+    });
 
-    const fields = response.data.fields;
-    return {
-      status: fields.status.name,
-      summary: fields.summary,
-      assignee: fields.assignee ? fields.assignee.displayName : "Não atribuído",
-    };
-  } catch (error) {
-    console.error("Erro ao buscar chamado Jira:", error.response?.statusText || error.message);
+    const data = response.data;
+    const status = data.currentStatus?.name || "Desconhecido";
+    const summary = data.requestFieldValues?.find(f => f.fieldId === "summary")?.value || "Sem título";
+    return { status, summary };
+
+  } catch (err) {
+    console.error("Erro ao buscar chamado Jira:", err.response?.statusText || err.message);
     return null;
   }
 }
 
-// 🕒 Monitora mudanças de status periodicamente
-async function monitorJiraIssues() {
-  for (const issueKey in monitoredIssues) {
-    const info = monitoredIssues[issueKey];
-    const current = await getJiraIssueStatus(issueKey);
+// ♻️ Função para monitorar chamados em intervalo
+async function monitorTickets() {
+  for (const [issueKey, lastStatus] of monitoredTickets.entries()) {
+    const info = await getJiraTicketStatus(issueKey);
+    if (!info) continue;
 
-    if (current && current.status !== info.status) {
-      monitoredIssues[issueKey] = current; // Atualiza cache
-      const msg = `⚙️ O chamado *${issueKey}* foi atualizado!\n` +
-        `📋 *${current.summary}*\n` +
-        `👤 Responsável: ${current.assignee}\n` +
-        `🟢 Novo status: *${current.status}*`;
+    if (info.status !== lastStatus) {
+      monitoredTickets.set(issueKey, info.status);
+      let emoji = "ℹ️";
 
-      await sendMessage(info.chatId, msg);
+      if (/cancelado/i.test(info.status)) emoji = "❌";
+      else if (/resolvido/i.test(info.status)) emoji = "✅";
+      else if (/aguardando validação/i.test(info.status)) emoji = "🕒";
+
+      await sendTelegramMessage(`${emoji} <b>${info.summary}</b>\nChamado <b>${issueKey}</b> atualizado para: <b>${info.status}</b>`);
     }
   }
 }
 
-// ⏱️ Executa o monitoramento a cada 2 minutos
-setInterval(monitorJiraIssues, 2 * 60 * 1000);
+// ⏱️ Agendador de monitoramento (a cada 3 minutos)
+setInterval(monitorTickets, 3 * 60 * 1000);
 
-// 📩 Função para enviar mensagem no Telegram
-async function sendMessage(chatId, text) {
-  await axios.post(`${TELEGRAM_API}/sendMessage`, {
-    chat_id: chatId,
-    text,
-    parse_mode: "Markdown",
-  });
-}
-
-// 🧩 Webhook do Telegram
+// 📩 Recebendo mensagens do Telegram
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", JSON.stringify(req.body, null, 2));
 
-  const message = req.body.message;
-  if (!message || !message.text) return res.sendStatus(200);
+  if (req.body.message?.text) {
+    const text = req.body.message.text;
+    const jiraMatch = text.match(/SUPORTE-\d+/i);
 
-  const chatId = message.chat.id;
-  const text = message.text;
+    if (jiraMatch) {
+      const issueKey = jiraMatch[0].toUpperCase();
+      const info = await getJiraTicketStatus(issueKey);
 
-  // 🔍 Detecta link do Jira e extrai a chave (ex: SUPORTE-1275286)
-  const jiraMatch = text.match(/SUPORTE-\d+/i);
-  if (jiraMatch) {
-    const issueKey = jiraMatch[0].toUpperCase();
-
-    const issue = await getJiraIssueStatus(issueKey);
-    if (!issue) {
-      await sendMessage(chatId, `❌ Não consegui consultar o status do chamado *${issueKey}*`);
-      return res.sendStatus(200);
+      if (info) {
+        monitoredTickets.set(issueKey, info.status);
+        await sendTelegramMessage(`📡 Recebi o chamado Jira:\nhttps://grupomateus.atlassian.net/browse/${issueKey}\n\n📝 <b>${info.summary}</b>\n🔍 Status atual: <b>${info.status}</b>\n\nVou monitorar e avisar quando houver mudanças.`);
+      } else {
+        await sendTelegramMessage("⚠️ Não consegui consultar os detalhes desse chamado. Verifique se ele existe ou se você tem acesso no portal.");
+      }
     }
-
-    monitoredIssues[issueKey] = { ...issue, chatId };
-    await sendMessage(
-      chatId,
-      `✅ Chamado *${issueKey}* registrado para monitoramento.\n` +
-      `📋 *${issue.summary}*\n` +
-      `👤 Responsável: ${issue.assignee}\n` +
-      `📊 Status atual: *${issue.status}*`
-    );
   }
 
   res.sendStatus(200);
 });
 
-// 🚀 Inicia servidor
+// 🚀 Inicializa o servidor
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
