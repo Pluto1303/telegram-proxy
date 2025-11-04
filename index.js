@@ -29,41 +29,23 @@ async function sendTelegramMessage(text) {
   }
 }
 
-// 🔍 Função aprimorada para obter informações do chamado Jira
+// 🔍 Buscar informações do chamado Jira (usando ServiceDesk API)
 async function getJiraTicketStatus(issueKey) {
-  const authHeader = {
+  const headers = {
     "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
     "Accept": "application/json"
   };
 
   try {
-    // 🔹 1ª tentativa: API do Service Desk (para portal de cliente)
-    const portalUrl = `${JIRA_BASE_URL}/rest/servicedeskapi/request/${issueKey}`;
-    const portalResponse = await axios.get(portalUrl, { headers: authHeader });
-    const portalData = portalResponse.data;
+    const url = `${JIRA_BASE_URL}/rest/servicedeskapi/request/${issueKey}`;
+    const response = await axios.get(url, { headers });
+    const data = response.data;
 
-    const portalStatus = portalData.currentStatus?.name;
-    const portalSummary = portalData.requestFieldValues?.find(f => f.fieldId === "summary")?.value;
+    const summary = data.summary || "Sem título";
+    const status = data.currentStatus?.status || "Desconhecido";
 
-    if (portalStatus && portalSummary) {
-      console.log(`✅ Dados obtidos via API do Portal (${issueKey})`);
-      return { status: portalStatus, summary: portalSummary };
-    }
-
-  } catch (e) {
-    console.log(`⚠️ Tentativa portal falhou (${issueKey}): ${e.response?.statusText || e.message}`);
-  }
-
-  try {
-    // 🔹 2ª tentativa: API clássica do Jira (para usuários internos)
-    const issueUrl = `${JIRA_BASE_URL}/rest/api/3/issue/${issueKey}`;
-    const response = await axios.get(issueUrl, { headers: authHeader });
-    const fields = response.data.fields;
-
-    const status = fields.status?.name || "Desconhecido";
-    const summary = fields.summary || "Sem título";
-    console.log(`✅ Dados obtidos via API Clássica (${issueKey})`);
-    return { status, summary };
+    console.log(`✅ Dados Jira obtidos (${issueKey}): ${summary} - ${status}`);
+    return { summary, status };
 
   } catch (err) {
     console.error("❌ Erro ao buscar chamado Jira:", err.response?.statusText || err.message);
@@ -71,7 +53,7 @@ async function getJiraTicketStatus(issueKey) {
   }
 }
 
-// ⏱️ Função para monitorar atualizações dos chamados
+// ⏱️ Monitorar mudanças de status
 async function monitorarChamados() {
   for (const issueKey in monitorados) {
     const info = monitorados[issueKey];
@@ -94,7 +76,7 @@ async function monitorarChamados() {
   }
 }
 
-// 🔄 Executar monitoramento a cada 2 minutos
+// 🔄 Executar a cada 2 minutos
 setInterval(monitorarChamados, 2 * 60 * 1000);
 
 // 📥 Receber mensagens do Telegram
