@@ -1,12 +1,11 @@
-
 const express = require("express");
 const axios = require("axios");
 const app = express();
 
 app.use(express.json());
 
-// Substitua pelo URL do seu Google Apps Script
-const SCRIPT_URL = https://script.google.com/home/projects/1Ces_Vk3CUbW1SLW5vaynx-7Izbj0-rkfhpZ5jslffEQc0ma1PkrcSHDG/edit;
+// ✅ URL do Apps Script correto (link publicado /exec)
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytKzYtG7wzXbqy_Jhdno93c3xee8oFk2fU5xv5X34O861rzA9YUAwtFBdvOIxecXme/exec";
 
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", req.body);
@@ -22,7 +21,6 @@ app.post("/", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
-
 
