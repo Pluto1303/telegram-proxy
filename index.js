@@ -7,7 +7,7 @@ app.use(bodyParser.json());
 
 // 🔧 Configurações principais
 const PORT = process.env.PORT || 10000;
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8462588145:AAGRhcJ7eJimORSuvGue4B55i4-0KT_swBQ";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "SEU_TOKEN_DO_BOT";
 const JIRA_EMAIL = process.env.JIRA_EMAIL || "carlos.monteiro@grupomateus.com.br";
 const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || "SEU_TOKEN_API_AQUI";
 const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
@@ -15,7 +15,7 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 📨 Envia mensagem para o Telegram (dinâmico por chat)
+// 📨 Envia mensagem ao Telegram (para o chat que enviou)
 async function sendTelegramMessage(chatId, text) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
@@ -28,7 +28,7 @@ async function sendTelegramMessage(chatId, text) {
   }
 }
 
-// 🔍 Busca informações do chamado Jira
+// 🔍 Busca informações do chamado Jira via API
 async function getJiraTicketStatus(issueKey) {
   const headers = {
     "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
@@ -46,14 +46,13 @@ async function getJiraTicketStatus(issueKey) {
     const filial = "260 - MATEUS SUPERMERCADOS S.A. MIX TUCURUI";
 
     return { summary, status, reporter, filial };
-
   } catch (err) {
     console.error("❌ Erro ao buscar chamado Jira:", err.response?.statusText || err.message);
     return null;
   }
 }
 
-// 💬 Mensagens de status personalizadas
+// 💬 Gera uma mensagem personalizada conforme o status
 function getMensagemPorStatus(status, mention) {
   const lower = status.toLowerCase();
 
@@ -73,12 +72,12 @@ function getMensagemPorStatus(status, mention) {
     return `✅ ${mention}, seu chamado foi resolvido com sucesso! Caso algo ainda não esteja correto, informe no chamado para reabrir.`;
 
   if (lower.includes("autorização"))
-    return `📝 ${mention}, seu chamado está aguardando *autorização* do gerente ou subgerente informado. Por favor, solicite a aprovação para que o suporte possa prosseguir.`;
+    return `📝 ${mention}, seu chamado está aguardando *autorização* do gerente ou subgerente informado. Solicite a aprovação para que o suporte possa prosseguir.`;
 
   return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*.`;
 }
 
-// ⏱️ Monitora alterações
+// ⏱️ Monitora alterações de status
 async function monitorarChamados() {
   for (const issueKey in monitorados) {
     const info = monitorados[issueKey];
@@ -104,7 +103,7 @@ async function monitorarChamados() {
   }
 }
 
-// 🔁 Verificação a cada 2 minutos
+// 🔁 Verifica atualizações a cada 2 minutos
 setInterval(monitorarChamados, 2 * 60 * 1000);
 
 // 📥 Recebe mensagens do Telegram
@@ -121,9 +120,8 @@ app.post("/", async (req, res) => {
   if (match) {
     const issueKey = match[0];
     const chamado = await getJiraTicketStatus(issueKey);
-    const chatId = message.chat.id;
 
-    // 🔗 Gera menção (usa @username se disponível)
+    // 🔗 Menção via @username
     const mention = message.from.username
       ? `@${message.from.username}`
       : message.from.first_name
@@ -132,28 +130,33 @@ app.post("/", async (req, res) => {
 
     if (chamado) {
       monitorados[issueKey] = {
-        chatId,
+        chatId: message.chat.id,
         statusAnterior: chamado.status,
         summary: chamado.summary,
         mention
       };
 
       await sendTelegramMessage(
-        chatId,
+        message.chat.id,
         `✅ *Chamado:* ${issueKey}\n` +
         `📋 *Resumo:* ${chamado.summary}\n` +
         `🏬 *Filial:* ${chamado.filial}\n` +
         `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
         `📌 *Status:* ${chamado.status}\n\n` +
-        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando. Assim que houver qualquer atualização, informarei por aqui.\n\n` +
+        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando.\nAssim que houver qualquer atualização, informarei por aqui.\n\n` +
         `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`
       );
     } else {
-      await sendTelegramMessage(chatId, `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`);
+      await sendTelegramMessage(
+        message.chat.id,
+        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*.\nVerifique se o link está correto ou se tenho acesso.`
+      );
     }
   }
 
   res.sendStatus(200);
 });
 
-app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
