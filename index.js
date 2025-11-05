@@ -8,7 +8,6 @@ app.use(bodyParser.json());
 // 🔧 Configurações principais
 const PORT = process.env.PORT || 10000;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8462588145:AAGRhcJ7eJimORSuvGue4B55i4-0KT_swBQ";
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-1001893986630";
 const JIRA_EMAIL = process.env.JIRA_EMAIL || "carlos.monteiro@grupomateus.com.br";
 const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || "SEU_TOKEN_API_AQUI";
 const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
@@ -16,11 +15,11 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 📨 Função para enviar mensagem ao Telegram
-async function sendTelegramMessage(text) {
+// 📨 Envia mensagem para o Telegram (dinâmico por chat)
+async function sendTelegramMessage(chatId, text) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: TELEGRAM_CHAT_ID,
+      chat_id: chatId,
       text,
       parse_mode: "Markdown"
     });
@@ -29,7 +28,7 @@ async function sendTelegramMessage(text) {
   }
 }
 
-// 🔍 Busca informações do chamado Jira via API
+// 🔍 Busca informações do chamado Jira
 async function getJiraTicketStatus(issueKey) {
   const headers = {
     "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
@@ -46,7 +45,6 @@ async function getJiraTicketStatus(issueKey) {
     const reporter = data.reporter?.displayName || "Desconhecido";
     const filial = "260 - MATEUS SUPERMERCADOS S.A. MIX TUCURUI";
 
-    console.log(`✅ Dados Jira obtidos (${issueKey}): ${summary} - ${status}`);
     return { summary, status, reporter, filial };
 
   } catch (err) {
@@ -55,7 +53,7 @@ async function getJiraTicketStatus(issueKey) {
   }
 }
 
-// 💬 Gera uma mensagem personalizada de acordo com o status do chamado
+// 💬 Mensagens de status personalizadas
 function getMensagemPorStatus(status, mention) {
   const lower = status.toLowerCase();
 
@@ -80,7 +78,7 @@ function getMensagemPorStatus(status, mention) {
   return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*.`;
 }
 
-// ⏱️ Monitora alterações de status
+// ⏱️ Monitora alterações
 async function monitorarChamados() {
   for (const issueKey in monitorados) {
     const info = monitorados[issueKey];
@@ -90,6 +88,7 @@ async function monitorarChamados() {
       const mensagemStatus = getMensagemPorStatus(novo.status, info.mention);
 
       await sendTelegramMessage(
+        info.chatId,
         `🔔 *Atualização no chamado*\n\n` +
         `✅ *Chamado:* ${issueKey}\n` +
         `📋 *Resumo:* ${novo.summary}\n` +
@@ -105,7 +104,7 @@ async function monitorarChamados() {
   }
 }
 
-// 🔁 Executa a verificação a cada 2 minutos
+// 🔁 Verificação a cada 2 minutos
 setInterval(monitorarChamados, 2 * 60 * 1000);
 
 // 📥 Recebe mensagens do Telegram
@@ -122,8 +121,9 @@ app.post("/", async (req, res) => {
   if (match) {
     const issueKey = match[0];
     const chamado = await getJiraTicketStatus(issueKey);
+    const chatId = message.chat.id;
 
-    // 🔗 Gera menção do Telegram (usa @ se disponível)
+    // 🔗 Gera menção (usa @username se disponível)
     const mention = message.from.username
       ? `@${message.from.username}`
       : message.from.first_name
@@ -132,12 +132,14 @@ app.post("/", async (req, res) => {
 
     if (chamado) {
       monitorados[issueKey] = {
+        chatId,
         statusAnterior: chamado.status,
         summary: chamado.summary,
         mention
       };
 
       await sendTelegramMessage(
+        chatId,
         `✅ *Chamado:* ${issueKey}\n` +
         `📋 *Resumo:* ${chamado.summary}\n` +
         `🏬 *Filial:* ${chamado.filial}\n` +
@@ -147,13 +149,11 @@ app.post("/", async (req, res) => {
         `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`
       );
     } else {
-      await sendTelegramMessage(`⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`);
+      await sendTelegramMessage(chatId, `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`);
     }
   }
 
   res.sendStatus(200);
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
