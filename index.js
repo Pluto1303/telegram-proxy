@@ -7,7 +7,7 @@ app.use(bodyParser.json());
 
 // 🔧 Configurações principais
 const PORT = process.env.PORT || 10000;
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "SEU_TOKEN_DO_BOT";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8462588145:AAGRhcJ7eJimORSuvGue4B55i4-0KT_swBQ";
 const JIRA_EMAIL = process.env.JIRA_EMAIL || "carlos.monteiro@grupomateus.com.br";
 const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || "SEU_TOKEN_API_AQUI";
 const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
@@ -15,7 +15,7 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 📨 Envia mensagem ao Telegram (para o chat que enviou)
+// 📨 Envia mensagem ao chat correto do Telegram
 async function sendTelegramMessage(chatId, text) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
@@ -28,7 +28,7 @@ async function sendTelegramMessage(chatId, text) {
   }
 }
 
-// 🔍 Busca informações do chamado Jira via API
+// 🔍 Busca informações do chamado Jira
 async function getJiraTicketStatus(issueKey) {
   const headers = {
     "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
@@ -45,6 +45,7 @@ async function getJiraTicketStatus(issueKey) {
     const reporter = data.reporter?.displayName || "Desconhecido";
     const filial = "260 - MATEUS SUPERMERCADOS S.A. MIX TUCURUI";
 
+    console.log(`✅ Jira OK (${issueKey}): ${summary} - ${status}`);
     return { summary, status, reporter, filial };
   } catch (err) {
     console.error("❌ Erro ao buscar chamado Jira:", err.response?.statusText || err.message);
@@ -52,7 +53,7 @@ async function getJiraTicketStatus(issueKey) {
   }
 }
 
-// 💬 Gera uma mensagem personalizada conforme o status
+// 💬 Mensagens personalizadas conforme o status
 function getMensagemPorStatus(status, mention) {
   const lower = status.toLowerCase();
 
@@ -63,21 +64,21 @@ function getMensagemPorStatus(status, mention) {
     return `💬 ${mention}, o suporte respondeu seu chamado e solicitou mais informações. Por favor, forneça os detalhes pedidos para que o atendimento continue.`;
 
   if (lower.includes("cancel"))
-    return `❌ ${mention}, o seu chamado foi cancelado pelo suporte. Verifique os comentários no Jira para entender o motivo e reabra o chamado se necessário.`;
+    return `❌ ${mention}, o seu chamado foi *cancelado* pelo suporte. Verifique os comentários no Jira para entender o motivo e reabra o chamado se necessário.`;
 
   if (lower.includes("andamento"))
-    return `🛠️ ${mention}, seu chamado está em andamento. O suporte está trabalhando para resolver o problema.`;
+    return `🛠️ ${mention}, seu chamado está *em andamento*. O suporte está trabalhando para resolver o problema.`;
 
   if (lower.includes("feito") || lower.includes("resolvido"))
-    return `✅ ${mention}, seu chamado foi resolvido com sucesso! Caso algo ainda não esteja correto, informe no chamado para reabrir.`;
+    return `✅ ${mention}, seu chamado foi *resolvido com sucesso*! Caso algo ainda não esteja correto, informe no chamado para reabrir.`;
 
   if (lower.includes("autorização"))
-    return `📝 ${mention}, seu chamado está aguardando *autorização* do gerente ou subgerente informado. Solicite a aprovação para que o suporte possa prosseguir.`;
+    return `📝 ${mention}, seu chamado está *aguardando autorização* do gerente ou subgerente informado. Por favor, solicite a aprovação para que o suporte possa prosseguir.`;
 
   return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*.`;
 }
 
-// ⏱️ Monitora alterações de status
+// 🔁 Monitoramento periódico
 async function monitorarChamados() {
   for (const issueKey in monitorados) {
     const info = monitorados[issueKey];
@@ -103,7 +104,7 @@ async function monitorarChamados() {
   }
 }
 
-// 🔁 Verifica atualizações a cada 2 minutos
+// ⏱️ Executa o monitoramento a cada 2 minutos
 setInterval(monitorarChamados, 2 * 60 * 1000);
 
 // 📥 Recebe mensagens do Telegram
@@ -121,19 +122,17 @@ app.post("/", async (req, res) => {
     const issueKey = match[0];
     const chamado = await getJiraTicketStatus(issueKey);
 
-    // 🔗 Menção via @username
+    // 🔗 Menção personalizada
     const mention = message.from.username
       ? `@${message.from.username}`
-      : message.from.first_name
-        ? message.from.first_name
-        : "Usuário";
+      : message.from.first_name || "Usuário";
 
     if (chamado) {
       monitorados[issueKey] = {
-        chatId: message.chat.id,
         statusAnterior: chamado.status,
         summary: chamado.summary,
-        mention
+        mention,
+        chatId: message.chat.id
       };
 
       await sendTelegramMessage(
@@ -143,13 +142,13 @@ app.post("/", async (req, res) => {
         `🏬 *Filial:* ${chamado.filial}\n` +
         `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
         `📌 *Status:* ${chamado.status}\n\n` +
-        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando.\nAssim que houver qualquer atualização, informarei por aqui.\n\n` +
+        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando. Assim que houver qualquer atualização, informarei por aqui.\n\n` +
         `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`
       );
     } else {
       await sendTelegramMessage(
         message.chat.id,
-        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*.\nVerifique se o link está correto ou se tenho acesso.`
+        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`
       );
     }
   }
@@ -157,6 +156,6 @@ app.post("/", async (req, res) => {
   res.sendStatus(200);
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
+
