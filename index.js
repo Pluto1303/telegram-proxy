@@ -16,11 +16,10 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 🧹 Escapa apenas caracteres realmente perigosos no MarkdownV2
+// 🔒 Escapa caracteres problemáticos do MarkdownV2 (inclui hífen "-")
 function escapeMarkdownV2(text) {
   if (!text) return "";
-  return text
-    .replace(/([_*\[\]()~`>#+=|{}.!\\])/g, "\\$1"); // removeu o escape do hífen (-)
+  return text.replace(/([_*\[\]()~`>#+=|{}.!\\-])/g, "\\$1");
 }
 
 // 📨 Envia mensagem formatada ao Telegram
@@ -63,7 +62,7 @@ async function getJiraTicketStatus(issueKey) {
   }
 }
 
-// 💬 Mensagens personalizadas conforme o status
+// 💬 Mensagens personalizadas por status
 function getMensagemPorStatus(status, mention) {
   const lower = status.toLowerCase();
 
@@ -168,7 +167,3 @@ app.post("/", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-
-
-
-
