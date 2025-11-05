@@ -16,13 +16,14 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 🔒 Escapa caracteres problemáticos do MarkdownV2 (inclui hífen "-")
+// 🔒 Escapa todos os caracteres especiais do MarkdownV2
 function escapeMarkdownV2(text) {
   if (!text) return "";
-  return text.replace(/([_*\[\]()~`>#+=|{}.!\\-])/g, "\\$1");
+  // Escapa _ * [ ] ( ) ~ ` > # + - = | { } . !
+  return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
-// 📨 Envia mensagem formatada ao Telegram
+// 📨 Envia mensagem ao Telegram
 async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
@@ -104,7 +105,7 @@ async function monitorarChamados() {
         `🙍‍♂️ *Solicitante:* ${escapeMarkdownV2(novo.reporter)}\n` +
         `📊 *Status:* ${escapeMarkdownV2(info.statusAnterior)} ➜ ${escapeMarkdownV2(novo.status)}\n\n` +
         `${mensagemStatus}\n\n` +
-        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
+        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${escapeMarkdownV2(issueKey)})`;
 
       await sendTelegramMessage(msg);
       monitorados[issueKey].statusAnterior = novo.status;
@@ -150,7 +151,7 @@ app.post("/", async (req, res) => {
         `🙍‍♂️ *Solicitante:* ${escapeMarkdownV2(chamado.reporter)}\n` +
         `📌 *Status:* ${escapeMarkdownV2(chamado.status)}\n\n` +
         `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando. Assim que houver qualquer atualização, informarei por aqui.\n\n` +
-        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
+        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${escapeMarkdownV2(issueKey)})`;
 
       await sendTelegramMessage(msg, message.chat.id);
     } else {
@@ -167,3 +168,5 @@ app.post("/", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
+
+
