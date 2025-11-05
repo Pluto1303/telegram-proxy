@@ -16,19 +16,29 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 🔒 Escapa todos os caracteres especiais do MarkdownV2
+// 🔒 Escapa todos os caracteres reservados do MarkdownV2
 function escapeMarkdownV2(text) {
   if (!text) return "";
-  // Escapa _ * [ ] ( ) ~ ` > # + - = | { } . !
+  // Escapa tudo que o Telegram considera reservado
   return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
-// 📨 Envia mensagem ao Telegram
+// 📨 Envia mensagem segura ao Telegram
 async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID) {
   try {
+    // Se houver link Markdown, não o escapa
+    const parts = text.split(/\[.*?\]\(.*?\)/);
+    const matches = text.match(/\[.*?\]\(.*?\)/g) || [];
+
+    let escaped = "";
+    for (let i = 0; i < parts.length; i++) {
+      escaped += escapeMarkdownV2(parts[i]);
+      if (matches[i]) escaped += matches[i]; // mantém o link intacto
+    }
+
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: chatId,
-      text,
+      text: escaped,
       parse_mode: "MarkdownV2",
       disable_web_page_preview: false
     });
@@ -37,7 +47,7 @@ async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID) {
   }
 }
 
-// 🔍 Busca informações do chamado Jira via API
+// 🔍 Busca informações do chamado Jira
 async function getJiraTicketStatus(issueKey) {
   const headers = {
     "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
@@ -49,14 +59,12 @@ async function getJiraTicketStatus(issueKey) {
     const response = await axios.get(url, { headers });
     const data = response.data;
 
-    const summary = data.summary || "Sem título";
-    const status = data.currentStatus?.status || "Desconhecido";
-    const reporter = data.reporter?.displayName || "Desconhecido";
-    const filial = "260 - MATEUS SUPERMERCADOS S.A. MIX TUCURUI";
-
-    console.log(`✅ Jira OK (${issueKey}): ${summary} - ${status}`);
-    return { summary, status, reporter, filial };
-
+    return {
+      summary: data.summary || "Sem título",
+      status: data.currentStatus?.status || "Desconhecido",
+      reporter: data.reporter?.displayName || "Desconhecido",
+      filial: "260 - MATEUS SUPERMERCADOS S.A. MIX TUCURUI"
+    };
   } catch (err) {
     console.error("❌ Erro ao buscar chamado Jira:", err.response?.statusText || err.message);
     return null;
@@ -85,10 +93,10 @@ function getMensagemPorStatus(status, mention) {
   if (lower.includes("autorização"))
     return `📝 ${mention}, seu chamado está *aguardando autorização* do gerente ou subgerente informado. Solicite a aprovação para que o suporte prossiga.`;
 
-  return `📌 ${mention}, seu chamado foi atualizado para o status: *${escapeMarkdownV2(status)}*.`;
+  return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*.`;
 }
 
-// ⏱️ Monitora alterações de status
+// ⏱️ Monitora chamados a cada 2 minutos
 async function monitorarChamados() {
   for (const issueKey in monitorados) {
     const info = monitorados[issueKey];
@@ -96,16 +104,15 @@ async function monitorarChamados() {
 
     if (novo && novo.status !== info.statusAnterior) {
       const mensagemStatus = getMensagemPorStatus(novo.status, info.mention);
-
       const msg =
         `🔔 *Atualização no chamado*\n\n` +
-        `✅ *Chamado:* ${escapeMarkdownV2(issueKey)}\n` +
-        `📋 *Resumo:* ${escapeMarkdownV2(novo.summary)}\n` +
-        `🏬 *Filial:* ${escapeMarkdownV2(novo.filial)}\n` +
-        `🙍‍♂️ *Solicitante:* ${escapeMarkdownV2(novo.reporter)}\n` +
-        `📊 *Status:* ${escapeMarkdownV2(info.statusAnterior)} ➜ ${escapeMarkdownV2(novo.status)}\n\n` +
+        `✅ *Chamado:* ${issueKey}\n` +
+        `📋 *Resumo:* ${novo.summary}\n` +
+        `🏬 *Filial:* ${novo.filial}\n` +
+        `🙍‍♂️ *Solicitante:* ${novo.reporter}\n` +
+        `📊 *Status:* ${info.statusAnterior} ➜ ${novo.status}\n\n` +
         `${mensagemStatus}\n\n` +
-        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${escapeMarkdownV2(issueKey)})`;
+        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
 
       await sendTelegramMessage(msg);
       monitorados[issueKey].statusAnterior = novo.status;
@@ -113,10 +120,9 @@ async function monitorarChamados() {
   }
 }
 
-// 🔁 Executa a verificação a cada 2 minutos
 setInterval(monitorarChamados, 2 * 60 * 1000);
 
-// 📥 Recebe mensagens do Telegram
+// 📥 Webhook Telegram
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", JSON.stringify(req.body, null, 2));
 
@@ -145,18 +151,18 @@ app.post("/", async (req, res) => {
       };
 
       const msg =
-        `✅ *Chamado:* ${escapeMarkdownV2(issueKey)}\n` +
-        `📋 *Resumo:* ${escapeMarkdownV2(chamado.summary)}\n` +
-        `🏬 *Filial:* ${escapeMarkdownV2(chamado.filial)}\n` +
-        `🙍‍♂️ *Solicitante:* ${escapeMarkdownV2(chamado.reporter)}\n` +
-        `📌 *Status:* ${escapeMarkdownV2(chamado.status)}\n\n` +
+        `✅ *Chamado:* ${issueKey}\n` +
+        `📋 *Resumo:* ${chamado.summary}\n` +
+        `🏬 *Filial:* ${chamado.filial}\n` +
+        `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
+        `📌 *Status:* ${chamado.status}\n\n` +
         `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando. Assim que houver qualquer atualização, informarei por aqui.\n\n` +
-        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${escapeMarkdownV2(issueKey)})`;
+        `[🔗 Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
 
       await sendTelegramMessage(msg, message.chat.id);
     } else {
       await sendTelegramMessage(
-        `⚠️ ${mention}, não consegui consultar o chamado *${escapeMarkdownV2(issueKey)}*. Verifique se o link está correto ou se tenho acesso.`,
+        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`,
         message.chat.id
       );
     }
@@ -165,8 +171,7 @@ app.post("/", async (req, res) => {
   res.sendStatus(200);
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
 
 
