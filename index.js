@@ -13,10 +13,10 @@ const JIRA_EMAIL = process.env.JIRA_EMAIL || "carlos.monteiro@grupomateus.com.br
 const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || "SEU_TOKEN_API_AQUI";
 const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 
-// 🧠 Banco temporário de monitoramento (memória)
+// 🧠 Armazena chamados monitorados em memória
 let monitorados = {};
 
-// 📨 Enviar mensagem ao Telegram
+// 📨 Envia mensagens ao Telegram
 async function sendTelegramMessage(text) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
@@ -29,7 +29,7 @@ async function sendTelegramMessage(text) {
   }
 }
 
-// 🔍 Buscar informações do chamado Jira (usando ServiceDesk API)
+// 🔍 Busca informações do chamado Jira via ServiceDesk API
 async function getJiraTicketStatus(issueKey) {
   const headers = {
     "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
@@ -43,9 +43,16 @@ async function getJiraTicketStatus(issueKey) {
 
     const summary = data.summary || "Sem título";
     const status = data.currentStatus?.status || "Desconhecido";
+    const reporter = data.reporter?.displayName || "Desconhecido";
+
+    // Procura filial dentro dos campos personalizados, se existir
+    const filialField = data.requestFieldValues?.find(
+      f => /filial/i.test(f.fieldId || f.name || "")
+    );
+    const filial = filialField?.value || "Não informado";
 
     console.log(`✅ Dados Jira obtidos (${issueKey}): ${summary} - ${status}`);
-    return { summary, status };
+    return { summary, status, reporter, filial };
 
   } catch (err) {
     console.error("❌ Erro ao buscar chamado Jira:", err.response?.statusText || err.message);
@@ -53,7 +60,7 @@ async function getJiraTicketStatus(issueKey) {
   }
 }
 
-// ⏱️ Monitorar mudanças de status
+// ⏱️ Monitora alterações de status
 async function monitorarChamados() {
   for (const issueKey in monitorados) {
     const info = monitorados[issueKey];
@@ -61,14 +68,19 @@ async function monitorarChamados() {
 
     if (novo && novo.status !== info.statusAnterior) {
       const emoji =
-        novo.status.toLowerCase().includes("cancelado") ? "❌" :
-        novo.status.toLowerCase().includes("aguardando") ? "⏳" :
+        novo.status.toLowerCase().includes("cancel") ? "❌" :
+        novo.status.toLowerCase().includes("aguard") ? "⏳" :
         novo.status.toLowerCase().includes("andamento") ? "🛠️" :
         novo.status.toLowerCase().includes("feito") ? "✅" :
-        "📄";
+        "📌";
 
       await sendTelegramMessage(
-        `${emoji} O chamado *${novo.summary}* (${issueKey}) mudou de status!\n\n📊 *${info.statusAnterior}* → *${novo.status}*`
+        `${emoji} *Atualização no chamado*\n\n` +
+        `✅ *Chamado:* ${issueKey}\n` +
+        `📋 *Resumo:* ${novo.summary}\n` +
+        `🏬 *Filial:* ${novo.filial}\n` +
+        `🙍‍♂️ *Solicitante:* ${novo.reporter}\n` +
+        `📊 *Status alterado:* ${info.statusAnterior} ➜ ${novo.status}`
       );
 
       monitorados[issueKey].statusAnterior = novo.status;
@@ -76,10 +88,10 @@ async function monitorarChamados() {
   }
 }
 
-// 🔄 Executar a cada 2 minutos
+// 🔄 Verifica a cada 2 minutos
 setInterval(monitorarChamados, 2 * 60 * 1000);
 
-// 📥 Receber mensagens do Telegram
+// 📥 Recebe mensagens do Telegram
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", JSON.stringify(req.body, null, 2));
 
@@ -100,7 +112,11 @@ app.post("/", async (req, res) => {
       };
 
       await sendTelegramMessage(
-        `📡 *Recebi o chamado Jira:*\nhttps://grupomateus.atlassian.net/browse/${issueKey}\n\n📝 *${chamado.summary}*\n🔍 *Status atual:* ${chamado.status}\n\nVou monitorar e avisar quando houver mudanças.`
+        `✅ *Chamado:* ${issueKey}\n` +
+        `📋 *Resumo:* ${chamado.summary}\n` +
+        `🏬 *Filial:* ${chamado.filial}\n` +
+        `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
+        `📌 *Status:* ${chamado.status}`
       );
     } else {
       await sendTelegramMessage(`⚠️ Não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`);
