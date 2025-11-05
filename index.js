@@ -16,20 +16,13 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 🧹 Função para limpar caracteres que quebram o Markdown
-function sanitizeMarkdown(text) {
-  if (!text) return "";
-  return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
-}
-
 // 📨 Função para enviar mensagem ao Telegram
 async function sendTelegramMessage(text) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: TELEGRAM_CHAT_ID,
       text,
-      parse_mode: "MarkdownV2",
-      disable_web_page_preview: false
+      parse_mode: "Markdown"
     });
   } catch (err) {
     console.error("❌ Erro ao enviar mensagem ao Telegram:", err.response?.data || err.message);
@@ -39,8 +32,8 @@ async function sendTelegramMessage(text) {
 // 🔍 Busca informações do chamado Jira via API
 async function getJiraTicketStatus(issueKey) {
   const headers = {
-    Authorization: `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
-    Accept: "application/json"
+    "Authorization": `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`,
+    "Accept": "application/json"
   };
 
   try {
@@ -48,9 +41,9 @@ async function getJiraTicketStatus(issueKey) {
     const response = await axios.get(url, { headers });
     const data = response.data;
 
-    const summary = sanitizeMarkdown(data.summary || "Sem título");
-    const status = sanitizeMarkdown(data.currentStatus?.status || "Desconhecido");
-    const reporter = sanitizeMarkdown(data.reporter?.displayName || "Desconhecido");
+    const summary = data.summary || "Sem título";
+    const status = data.currentStatus?.status || "Desconhecido";
+    const reporter = data.reporter?.displayName || "Desconhecido";
     const filial = "260 - MATEUS SUPERMERCADOS S.A. MIX TUCURUI";
 
     console.log(`✅ Jira OK (${issueKey}): ${summary} - ${status}`);
@@ -62,29 +55,29 @@ async function getJiraTicketStatus(issueKey) {
   }
 }
 
-// 💬 Gera uma mensagem personalizada de acordo com o status do chamado
+// 💬 Gera mensagem personalizada por status
 function getMensagemPorStatus(status, mention) {
   const lower = status.toLowerCase();
 
   if (lower.includes("validação"))
-    return `✅ ${mention}, seu chamado foi atendido\\. Verifique se está tudo certo e aprove o chamado\\. Caso ainda haja algo pendente, recuse para que o suporte possa atuar novamente\\.`;
+    return `✅ ${mention}, seu chamado foi atendido! Verifique se está tudo certo e aprove o chamado. Caso ainda haja algo pendente, recuse para que o suporte possa atuar novamente.`;
 
   if (lower.includes("cliente"))
-    return `💬 ${mention}, o suporte respondeu seu chamado e solicitou mais informações\\. Por favor, forneça os detalhes pedidos para que o atendimento continue\\.`;
+    return `💬 ${mention}, o suporte respondeu seu chamado e solicitou mais informações. Por favor, forneça os detalhes pedidos para que o atendimento continue.`;
 
   if (lower.includes("cancel"))
-    return `❌ ${mention}, o seu chamado foi cancelado pelo suporte\\. Verifique os comentários no Jira para entender o motivo e reabra o chamado se necessário\\.`;
+    return `❌ ${mention}, o seu chamado foi cancelado pelo suporte. Verifique os comentários no Jira para entender o motivo e reabra o chamado se necessário.`;
 
   if (lower.includes("andamento"))
-    return `🛠️ ${mention}, seu chamado está em andamento\\. O suporte está trabalhando para resolver o problema\\.`;
+    return `🛠️ ${mention}, seu chamado está em andamento. O suporte está trabalhando para resolver o problema.`;
 
   if (lower.includes("feito") || lower.includes("resolvido"))
-    return `✅ ${mention}, seu chamado foi resolvido com sucesso\\. Caso algo ainda não esteja correto, informe no chamado para reabrir\\.`;
+    return `✅ ${mention}, seu chamado foi resolvido com sucesso! Caso algo ainda não esteja correto, informe no chamado para reabrir.`;
 
   if (lower.includes("autorização"))
-    return `📝 ${mention}, seu chamado está aguardando *autorização* do gerente ou subgerente informado\\. Solicite a aprovação para que o suporte possa prosseguir\\.`;
+    return `📝 ${mention}, seu chamado está aguardando *autorização* do gerente ou subgerente informado. Solicite a aprovação para que o suporte possa prosseguir.`;
 
-  return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*\\.`;
+  return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*.`;
 }
 
 // ⏱️ Monitora alterações de status
@@ -131,8 +124,8 @@ app.post("/", async (req, res) => {
     const chamado = await getJiraTicketStatus(issueKey);
 
     const mention = message.from.username
-      ? `@${sanitizeMarkdown(message.from.username)}`
-      : sanitizeMarkdown(message.from.first_name || "Usuário");
+      ? `@${message.from.username}`
+      : message.from.first_name || "Usuário";
 
     if (chamado) {
       monitorados[issueKey] = {
@@ -147,27 +140,24 @@ app.post("/", async (req, res) => {
         `🏬 *Filial:* ${chamado.filial}\n` +
         `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
         `📌 *Status:* ${chamado.status}\n\n` +
-        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando\\. Assim que houver qualquer atualização, informarei por aqui\\.\n\n` +
+        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando. Assim que houver qualquer atualização, informarei por aqui.\n\n` +
         `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`
       );
     } else {
-      await sendTelegramMessage(`⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*\\. Verifique se o link está correto ou se tenho acesso\\.`);
+      await sendTelegramMessage(
+        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`
+      );
     }
   }
 
   res.sendStatus(200);
 });
 
-// 🟢 Rota de ping para manter o Render ativo
-app.get("/ping", (req, res) => {
-  const now = new Date().toLocaleString("pt-BR", { timeZone: "America/Fortaleza" });
-  console.log(`💓 Ping recebido às ${now}`);
-  res.status(200).send("✅ Bot online e monitorando chamados.");
+// 🟢 Rota para manter o app ativo (UptimeRobot)
+app.all("/ping", (req, res) => {
+  res.status(200).send("OK");
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
-
-
-
