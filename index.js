@@ -16,24 +16,22 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 🧹 Função que escapa corretamente o MarkdownV2
+// 🧹 Escapa caracteres especiais do MarkdownV2
 function escapeMarkdownV2(text) {
   if (!text) return "";
   return text
-    .replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1")
-    .replace(/-/g, "\\-")
-    .replace(/\(/g, "\\(")
-    .replace(/\)/g, "\\)");
+    .replace(/([_*\[\]()~`>#+=|{}.!\\<>-])/g, "\\$1"); // agora escapa TODOS os símbolos, incluindo '-'
 }
 
-// 📨 Função para enviar mensagem ao Telegram
+// 📨 Envia mensagem para o Telegram
 async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID) {
   try {
     const safeText = escapeMarkdownV2(text);
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: chatId,
       text: safeText,
-      parse_mode: "MarkdownV2"
+      parse_mode: "MarkdownV2",
+      disable_web_page_preview: false
     });
   } catch (err) {
     console.error("❌ Erro ao enviar mensagem ao Telegram:", err.response?.data || err.message);
@@ -100,17 +98,17 @@ async function monitorarChamados() {
     if (novo && novo.status !== info.statusAnterior) {
       const mensagemStatus = getMensagemPorStatus(novo.status, info.mention);
 
-      await sendTelegramMessage(
+      const msg =
         `🔔 *Atualização no chamado*\n\n` +
-        `✅ *Chamado:* ${issueKey}\n` +
-        `📋 *Resumo:* ${novo.summary}\n` +
-        `🏬 *Filial:* ${novo.filial}\n` +
-        `🙍‍♂️ *Solicitante:* ${novo.reporter}\n` +
-        `📊 *Status:* ${info.statusAnterior} ➜ ${novo.status}\n\n` +
+        `✅ *Chamado:* ${escapeMarkdownV2(issueKey)}\n` +
+        `📋 *Resumo:* ${escapeMarkdownV2(novo.summary)}\n` +
+        `🏬 *Filial:* ${escapeMarkdownV2(novo.filial)}\n` +
+        `🙍‍♂️ *Solicitante:* ${escapeMarkdownV2(novo.reporter)}\n` +
+        `📊 *Status:* ${escapeMarkdownV2(info.statusAnterior)} ➜ ${escapeMarkdownV2(novo.status)}\n\n` +
         `${mensagemStatus}\n\n` +
-        `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`
-      );
+        `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
 
+      await sendTelegramMessage(msg);
       monitorados[issueKey].statusAnterior = novo.status;
     }
   }
@@ -147,19 +145,19 @@ app.post("/", async (req, res) => {
         mention
       };
 
-      await sendTelegramMessage(
-        `✅ *Chamado:* ${issueKey}\n` +
-        `📋 *Resumo:* ${chamado.summary}\n` +
-        `🏬 *Filial:* ${chamado.filial}\n` +
-        `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
-        `📌 *Status:* ${chamado.status}\n\n` +
-        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando\\. Assim que houver qualquer atualização, informarei por aqui\\.\n\n` +
-        `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`,
-        message.chat.id
-      );
+      const msg =
+        `✅ *Chamado:* ${escapeMarkdownV2(issueKey)}\n` +
+        `📋 *Resumo:* ${escapeMarkdownV2(chamado.summary)}\n` +
+        `🏬 *Filial:* ${escapeMarkdownV2(chamado.filial)}\n` +
+        `🙍‍♂️ *Solicitante:* ${escapeMarkdownV2(chamado.reporter)}\n` +
+        `📌 *Status:* ${escapeMarkdownV2(chamado.status)}\n\n` +
+        `🤖 Olá ${escapeMarkdownV2(mention)}, recebi o seu chamado e já estou monitorando\\. Assim que houver qualquer atualização, informarei por aqui\\.\n\n` +
+        `🔗 [Abrir no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
+
+      await sendTelegramMessage(msg, message.chat.id);
     } else {
       await sendTelegramMessage(
-        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*\\. Verifique se o link está correto ou se tenho acesso\\.`,
+        `⚠️ ${escapeMarkdownV2(mention)}, não consegui consultar o chamado *${escapeMarkdownV2(issueKey)}*\\. Verifique se o link está correto ou se tenho acesso\\.`,
         message.chat.id
       );
     }
@@ -171,7 +169,6 @@ app.post("/", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-
 
 
 
