@@ -16,22 +16,27 @@ const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
 
-// 📨 Função para enviar mensagem ao Telegram (com correção MarkdownV2)
+// 🧹 Função que escapa corretamente o MarkdownV2
+function escapeMarkdownV2(text) {
+  if (!text) return "";
+  return text
+    .replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1")
+    .replace(/-/g, "\\-")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+// 📨 Função para enviar mensagem ao Telegram
 async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID) {
-  // Escapa caracteres especiais do MarkdownV2
-  const escapeMarkdown = (str) =>
-    str
-      .replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&")
-      .replace(/\\/g, "\\\\");
   try {
-    const safeText = escapeMarkdown(text);
+    const safeText = escapeMarkdownV2(text);
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: chatId,
       text: safeText,
       parse_mode: "MarkdownV2"
     });
   } catch (err) {
-    console.error("Erro ao enviar mensagem ao Telegram:", err.response?.data || err.message);
+    console.error("❌ Erro ao enviar mensagem ao Telegram:", err.response?.data || err.message);
   }
 }
 
@@ -83,7 +88,7 @@ function getMensagemPorStatus(status, mention) {
   if (lower.includes("autorização"))
     return `📝 ${mention}, seu chamado está aguardando autorização do gerente ou subgerente informado\\. Por favor, solicite a aprovação para que o suporte possa prosseguir\\.`;
 
-  return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*\\.`;
+  return `📌 ${mention}, seu chamado foi atualizado para o status: *${escapeMarkdownV2(status)}*\\.`;
 }
 
 // ⏱️ Monitora alterações de status
@@ -129,7 +134,6 @@ app.post("/", async (req, res) => {
     const issueKey = match[0];
     const chamado = await getJiraTicketStatus(issueKey);
 
-    // 🔗 Gera menção do Telegram (usa @ se disponível)
     const mention = message.from.username
       ? `@${message.from.username}`
       : message.from.first_name
@@ -154,7 +158,10 @@ app.post("/", async (req, res) => {
         message.chat.id
       );
     } else {
-      await sendTelegramMessage(`⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*\\. Verifique se o link está correto ou se tenho acesso\\.`, message.chat.id);
+      await sendTelegramMessage(
+        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*\\. Verifique se o link está correto ou se tenho acesso\\.`,
+        message.chat.id
+      );
     }
   }
 
@@ -164,6 +171,7 @@ app.post("/", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
+
 
 
 
