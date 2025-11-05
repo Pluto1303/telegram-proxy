@@ -45,11 +45,11 @@ async function getJiraTicketStatus(issueKey) {
     const status = data.currentStatus?.status || "Desconhecido";
     const reporter = data.reporter?.displayName || "Desconhecido";
 
-    // Procura filial dentro dos campos personalizados, se existir
+    // Busca campo de filial (ou usa padrão)
     const filialField = data.requestFieldValues?.find(
       f => /filial/i.test(f.fieldId || f.name || "")
     );
-    const filial = filialField?.value || "Não informado";
+    const filial = filialField?.value || "260 - MATEUS SUPERMERCADOS S.A. MIX TUCURUI";
 
     console.log(`✅ Dados Jira obtidos (${issueKey}): ${summary} - ${status}`);
     return { summary, status, reporter, filial };
@@ -116,7 +116,9 @@ app.post("/", async (req, res) => {
         `📋 *Resumo:* ${chamado.summary}\n` +
         `🏬 *Filial:* ${chamado.filial}\n` +
         `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
-        `📌 *Status:* ${chamado.status}`
+        `📌 *Status:* ${chamado.status}\n\n` +
+        `🤖 *Olá ${chamado.reporter}*,\n` +
+        `recebi o seu chamado e já estou monitorando. Assim que houver qualquer atualização, informarei por aqui!`
       );
     } else {
       await sendTelegramMessage(`⚠️ Não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`);
