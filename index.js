@@ -70,32 +70,45 @@ async function getJiraTicketStatus(issueKey) {
 }
 
 // 💬 Mensagens personalizadas por status
-function getMensagemPorStatus(status, mention) {
+function getMensagemPorStatus(status, mention, anterior = "") {
   const lower = status.toLowerCase();
 
-  if (lower.includes("novo") || lower.includes("aberto"))
-    return `🆕 ${mention}, seu chamado foi *registrado com sucesso* e está **aguardando atendimento da equipe do suporte N1**. Assim que o suporte iniciar o tratamento, você será notificado automaticamente por aqui.`;
+  // ✅ Fechado
+  if (lower.includes("fechada")) {
+    return `📁 ${mention}, o seu chamado foi *encerrado com sucesso*.\n` +
+      `Caso o problema persista, você pode *reabri-lo diretamente pelo Jira* para nova análise da equipe.`;
+  }
 
+  // 🔁 Aguardando validação ➜ Reaberta
+  if (anterior.toLowerCase().includes("aguardando validação") && lower.includes("reaberta")) {
+    return `♻️ ${mention}, o seu chamado foi *reaberto* e retornou para a *fila de atendimento do Suporte N1*.\n` +
+      `Nossa equipe irá analisar novamente o caso e dará sequência ao suporte o mais breve possível.`;
+  }
+
+  // 📨 Aguardando autorização ➜ Aguardando pelo Suporte
+  if (anterior.toLowerCase().includes("autorização") && lower.includes("suporte")) {
+    return `📨 ${mention}, o *gerente ou subgerente aprovou seu chamado*.\n` +
+      `Ele agora entrou na *fila de atendimento da equipe do Suporte N1*, que dará continuidade ao processo.`;
+  }
+
+  // ⚙️ Padrões gerais
   if (lower.includes("validação"))
-    return `🧩 ${mention}, seu chamado foi *atendido*. Verifique se está tudo certo e aprove o chamado. Caso ainda haja algo pendente, recuse para que o suporte possa atuar novamente.`;
+    return `✅ ${mention}, seu chamado foi *atendido*. Verifique se está tudo certo e aprove o chamado. Caso ainda haja algo pendente, recuse para que o suporte possa atuar novamente.`;
 
   if (lower.includes("cliente"))
     return `💬 ${mention}, o suporte respondeu seu chamado e solicitou mais informações. Por favor, forneça os detalhes pedidos para que o atendimento continue.`;
 
   if (lower.includes("cancel"))
-    return `🚫 ${mention}, o seu chamado foi *cancelado* pelo suporte. Verifique os comentários no Jira para entender o motivo e reabra o chamado se necessário.`;
+    return `❌ ${mention}, o seu chamado foi *cancelado* pelo suporte. Verifique os comentários no Jira para entender o motivo e reabra o chamado se necessário.`;
 
   if (lower.includes("andamento"))
-    return `⚙️ ${mention}, seu chamado está *em andamento*. O suporte está trabalhando para resolver o problema.`;
+    return `🛠️ ${mention}, seu chamado está *em andamento*. O suporte está trabalhando para resolver o problema.`;
 
   if (lower.includes("feito") || lower.includes("resolvido"))
     return `✅ ${mention}, seu chamado foi *resolvido com sucesso*! Caso algo ainda não esteja correto, informe no chamado para reabrir.`;
 
   if (lower.includes("autorização"))
     return `📝 ${mention}, seu chamado está *aguardando autorização* do gerente ou subgerente informado. Solicite a aprovação para que o suporte prossiga.`;
-
-  if (lower.includes("fechado") || lower.includes("encerrado"))
-    return `📁 ${mention}, o chamado foi *encerrado com sucesso*. Agradecemos pelo acompanhamento! Caso o problema volte a ocorrer, sinta-se à vontade para abrir um novo chamado.`;
 
   return `📌 ${mention}, seu chamado foi atualizado para o status: *${status}*.`;
 }
@@ -107,13 +120,13 @@ async function monitorarChamados() {
     const novo = await getJiraTicketStatus(issueKey);
 
     if (novo && novo.status !== info.statusAnterior) {
-      const mensagemStatus = getMensagemPorStatus(novo.status, info.mention);
+      const mensagemStatus = getMensagemPorStatus(novo.status, info.mention, info.statusAnterior);
       const msg =
         `📢 *Atualização no chamado*\n\n` +
-        `🔹 *Chamado:* ${issueKey}\n` +
+        `📘 *Chamado:* ${issueKey}\n` +
         `🧾 *Resumo:* ${novo.summary}\n` +
-        `🏬 *Filial:* ${novo.filial}\n` +
-        `🙍‍♂️ *Solicitante:* ${novo.reporter}\n` +
+        `🏢 *Filial:* ${novo.filial}\n` +
+        `👤 *Solicitante:* ${novo.reporter}\n` +
         `📊 *Status:* ${info.statusAnterior} ➜ ${novo.status}\n\n` +
         `${mensagemStatus}\n\n` +
         `[🔗 Ver no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
@@ -123,7 +136,6 @@ async function monitorarChamados() {
     }
   }
 }
-
 setInterval(monitorarChamados, 2 * 60 * 1000);
 
 // 📥 Webhook Telegram
@@ -158,10 +170,11 @@ app.post("/", async (req, res) => {
       const msg =
         `🆕 *Chamado:* ${issueKey}\n` +
         `🧾 *Resumo:* ${chamado.summary}\n` +
-        `🏬 *Filial:* ${chamado.filial}\n` +
-        `🙍‍♂️ *Solicitante:* ${chamado.reporter}\n` +
+        `🏢 *Filial:* ${chamado.filial}\n` +
+        `👤 *Solicitante:* ${chamado.reporter}\n` +
         `📊 *Status:* ${chamado.status}\n\n` +
-        `🤖 Olá ${mention}, recebi o seu chamado e já estou monitorando. O *bot auxiliar do CPD* informará automaticamente por aqui sempre que houver uma atualização.\n\n` +
+        `👋 Olá ${mention}, recebi o seu chamado e já estou monitorando.\n` +
+        `O *bot auxiliar do CPD* informará automaticamente por aqui sempre que houver uma atualização.\n\n` +
         `[🔗 Ver no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
 
       await sendTelegramMessage(msg, message.chat.id);
