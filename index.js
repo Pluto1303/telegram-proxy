@@ -57,23 +57,6 @@ async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID, replyMarkup 
   }
 }
 
-let escaped = "";
-for (let i = 0; i < parts.length; i++) {
-  escaped += escapeMarkdownV2(parts[i]);
-  if (matches[i]) escaped += matches[i];
-}
-
-await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-  chat_id: chatId,
-  text: escaped,
-  parse_mode: "MarkdownV2",
-  disable_web_page_preview: false
-});
-  } catch (err) {
-  console.error("❌ Erro ao enviar mensagem ao Telegram:", err.response?.data || err.message);
-}
-}
-
 // 🔍 Busca informações do chamado Jira
 async function getJiraTicketStatus(issueKey) {
   const headers = {
