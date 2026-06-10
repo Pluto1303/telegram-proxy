@@ -157,6 +157,32 @@ app.post("/", async (req, res) => {
   console.log("CALLBACK:", JSON.stringify(req.body.callback_query, null, 2));
 
   const message = req.body?.message;
+
+  const callback = req.body?.callback_query;
+
+  if (callback?.data?.startsWith("status_")) {
+    const issueKey = callback.data.replace("status_", "");
+
+    const chamado = await getJiraTicketStatus(issueKey);
+
+    if (chamado) {
+      const msg =
+        `🔄 *Consulta manual*\n\n` +
+        `📘 *Chamado:* ${issueKey}\n` +
+        `🧾 *Resumo:* ${chamado.summary}\n` +
+        `🏢 *Filial:* ${chamado.filial}\n` +
+        `👤 *Solicitante:* ${chamado.reporter}\n` +
+        `📊 *Status:* ${chamado.status}\n\n` +
+        `[🔗 Ver no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
+
+      await sendTelegramMessage(
+        msg,
+        callback.message.chat.id
+      );
+    }
+
+    return res.sendStatus(200);
+  }
   const text = message?.text;
   if (!text) return res.sendStatus(200);
 
