@@ -179,7 +179,22 @@ app.post("/", async (req, res) => {
         `O *bot auxiliar do CPD* informará automaticamente por aqui sempre que houver uma atualização.\n\n` +
         `[🔗 Ver no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
 
-      await sendTelegramMessage(msg, message.chat.id);
+      const botoes = {
+        inline_keyboard: [
+          [
+            {
+              text: "🔄 Atualizar Status",
+              callback_data: `status_${issueKey}`
+            }
+          ]
+        ]
+      };
+
+      await sendTelegramMessage(
+        msg,
+        message.chat.id,
+        botoes
+      );
     } else {
       await sendTelegramMessage(
         `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`,
