@@ -153,8 +153,6 @@ setInterval(monitorarChamados, 2 * 60 * 1000);
 // 📥 Webhook Telegram
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", JSON.stringify(req.body, null, 2));
-  console.log("TIPO UPDATE:", Object.keys(req.body));
-  console.log("CALLBACK:", JSON.stringify(req.body.callback_query, null, 2));
 
   const message = req.body?.message;
 
@@ -181,67 +179,75 @@ app.post("/", async (req, res) => {
       );
     }
 
-    return res.sendStatus(200);
+    await axios.post(
+      `https://api.telegram.org/bot${8462588145: AAGRhcJ7eJimORSuvGue4B55i4 - 0KT_swBQ}/answerCallbackQuery`,
+  {
+    callback_query_id: callback.id,
+      text: "Consultando chamado..."
   }
-  const text = message?.text;
-  if (!text) return res.sendStatus(200);
+);
 
-  const jiraRegex = /SUPORTE-\d+/i;
-  const match = text.match(jiraRegex);
+return res.sendStatus(200);
+  }
+const text = message?.text;
+if (!text) return res.sendStatus(200);
 
-  if (match) {
-    const issueKey = match[0];
-    const chamado = await getJiraTicketStatus(issueKey);
+const jiraRegex = /SUPORTE-\d+/i;
+const match = text.match(jiraRegex);
 
-    const mention = message.from.username
-      ? `@${message.from.username}`
-      : message.from.first_name
-        ? message.from.first_name
-        : "Usuário";
+if (match) {
+  const issueKey = match[0];
+  const chamado = await getJiraTicketStatus(issueKey);
 
-    if (chamado) {
-      monitorados[issueKey] = {
-        statusAnterior: chamado.status,
-        summary: chamado.summary,
-        mention,
-        chatId: message.chat.id
-      };
+  const mention = message.from.username
+    ? `@${message.from.username}`
+    : message.from.first_name
+      ? message.from.first_name
+      : "Usuário";
 
-      const msg =
-        `🆕 *Chamado:* ${issueKey}\n` +
-        `🧾 *Resumo:* ${chamado.summary}\n` +
-        `🏢 *Filial:* ${chamado.filial}\n` +
-        `👤 *Solicitante:* ${chamado.reporter}\n` +
-        `📊 *Status:* ${chamado.status}\n\n` +
-        `👋 Olá ${mention}, recebi o seu chamado e já estou monitorando.\n` +
-        `O *bot auxiliar do CPD* informará automaticamente por aqui sempre que houver uma atualização.\n\n` +
-        `[🔗 Ver no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
+  if (chamado) {
+    monitorados[issueKey] = {
+      statusAnterior: chamado.status,
+      summary: chamado.summary,
+      mention,
+      chatId: message.chat.id
+    };
 
-      const botoes = {
-        inline_keyboard: [
-          [
-            {
-              text: "🔄 Atualizar Status",
-              callback_data: `status_${issueKey}`
-            }
-          ]
+    const msg =
+      `🆕 *Chamado:* ${issueKey}\n` +
+      `🧾 *Resumo:* ${chamado.summary}\n` +
+      `🏢 *Filial:* ${chamado.filial}\n` +
+      `👤 *Solicitante:* ${chamado.reporter}\n` +
+      `📊 *Status:* ${chamado.status}\n\n` +
+      `👋 Olá ${mention}, recebi o seu chamado e já estou monitorando.\n` +
+      `O *bot auxiliar do CPD* informará automaticamente por aqui sempre que houver uma atualização.\n\n` +
+      `[🔗 Ver no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
+
+    const botoes = {
+      inline_keyboard: [
+        [
+          {
+            text: "🔄 Atualizar Status",
+            callback_data: `status_${issueKey}`
+          }
         ]
-      };
+      ]
+    };
 
-      await sendTelegramMessage(
-        msg,
-        message.chat.id,
-        botoes
-      );
-    } else {
-      await sendTelegramMessage(
-        `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`,
-        message.chat.id
-      );
-    }
+    await sendTelegramMessage(
+      msg,
+      message.chat.id,
+      botoes
+    );
+  } else {
+    await sendTelegramMessage(
+      `⚠️ ${mention}, não consegui consultar o chamado *${issueKey}*. Verifique se o link está correto ou se tenho acesso.`,
+      message.chat.id
+    );
   }
+}
 
-  res.sendStatus(200);
+res.sendStatus(200);
 });
 
 // 🩺 Rota de verificação (Uptime Kuma/Render)
