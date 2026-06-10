@@ -173,17 +173,20 @@ app.post("/", async (req, res) => {
         `📊 *Status:* ${chamado.status}\n\n` +
         `[🔗 Ver no Jira](${JIRA_BASE_URL}/browse/${issueKey})`;
 
-      await sendTelegramMessage(
-        msg,
-        callback.message.chat.id
-      );
+      // await sendTelegramMessage(
+      //   msg,
+      //   callback.message.chat.id
+      // );
     }
 
     await axios.post(
-      `https://api.telegram.org/bot${TELEGRAM_TOKEN}}/answerCallbackQuery`,
+      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`,
       {
         callback_query_id: callback.id,
-        text: "Consultando chamado..."
+        text:
+          `Chamado: ${issueKey}\n` +
+          `Status: ${chamado?.status || "Indisponível"}`,
+        show_alert: true
       }
     );
 
