@@ -142,6 +142,7 @@ setInterval(monitorarChamados, 2 * 60 * 1000);
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", JSON.stringify(req.body, null, 2));
   console.log("TIPO UPDATE:", Object.keys(req.body));
+  console.log("CALLBACK:", JSON.stringify(req.body.callback_query, null, 2));
 
   const message = req.body?.message;
   const text = message?.text;
