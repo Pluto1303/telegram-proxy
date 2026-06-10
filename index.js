@@ -184,8 +184,8 @@ app.post("/", async (req, res) => {
       {
         callback_query_id: callback.id,
         text:
-          `Chamado: ${issueKey}\n` +
-          `Status: ${chamado?.status || "Indisponível"}`,
+          `📘 ${issueKey}\n\n` +
+          `📊 ${chamado?.status || "Indisponível"}`,
         show_alert: true
       }
     );
@@ -230,7 +230,7 @@ app.post("/", async (req, res) => {
         inline_keyboard: [
           [
             {
-              text: "🔄 Atualizar Status",
+              text: "📊 Ver Status Atual",
               callback_data: `status_${issueKey}`
             }
           ]
