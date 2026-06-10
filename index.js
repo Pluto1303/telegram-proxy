@@ -23,7 +23,7 @@ function escapeMarkdownV2(text) {
 }
 
 // 📨 Envia mensagem segura ao Telegram
-async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID) {
+async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID, replyMarkup = null) {
   try {
     const parts = text.split(/\[.*?\]\(.*?\)/);
     const matches = text.match(/\[.*?\]\(.*?\)/g) || [];
@@ -34,15 +34,44 @@ async function sendTelegramMessage(text, chatId = TELEGRAM_CHAT_ID) {
       if (matches[i]) escaped += matches[i];
     }
 
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    const payload = {
       chat_id: chatId,
       text: escaped,
       parse_mode: "MarkdownV2",
       disable_web_page_preview: false
-    });
+    };
+
+    if (replyMarkup) {
+      payload.reply_markup = replyMarkup;
+    }
+
+    await axios.post(
+      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,
+      payload
+    );
   } catch (err) {
-    console.error("❌ Erro ao enviar mensagem ao Telegram:", err.response?.data || err.message);
+    console.error(
+      "❌ Erro ao enviar mensagem ao Telegram:",
+      err.response?.data || err.message
+    );
   }
+}
+
+let escaped = "";
+for (let i = 0; i < parts.length; i++) {
+  escaped += escapeMarkdownV2(parts[i]);
+  if (matches[i]) escaped += matches[i];
+}
+
+await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+  chat_id: chatId,
+  text: escaped,
+  parse_mode: "MarkdownV2",
+  disable_web_page_preview: false
+});
+  } catch (err) {
+  console.error("❌ Erro ao enviar mensagem ao Telegram:", err.response?.data || err.message);
+}
 }
 
 // 🔍 Busca informações do chamado Jira
