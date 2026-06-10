@@ -185,6 +185,7 @@ app.post("/", async (req, res) => {
         callback_query_id: callback.id,
         text:
           `📘 ${issueKey}\n\n` +
+          `🧾 ${(chamado?.summary || "Sem resumo").substring(0, 80)}\n\n` +
           `📊 ${chamado?.status || "Indisponível"}`,
         show_alert: true
       }
