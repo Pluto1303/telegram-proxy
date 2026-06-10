@@ -141,6 +141,7 @@ setInterval(monitorarChamados, 2 * 60 * 1000);
 // 📥 Webhook Telegram
 app.post("/", async (req, res) => {
   console.log("📩 Dados recebidos do Telegram:", JSON.stringify(req.body, null, 2));
+  console.log("TIPO UPDATE:", Object.keys(req.body));
 
   const message = req.body?.message;
   const text = message?.text;
