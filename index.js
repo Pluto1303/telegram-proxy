@@ -7,11 +7,26 @@ app.use(bodyParser.json());
 
 // 🔧 Configurações principais
 const PORT = process.env.PORT || 10000;
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "8462588145:AAGRhcJ7eJimORSuvGue4B55i4-0KT_swBQ";
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-1001893986630";
-const JIRA_EMAIL = process.env.JIRA_EMAIL || "carlos.monteiro@grupomateus.com.br";
-const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || "SEU_TOKEN_API_AQUI";
-const JIRA_BASE_URL = "https://grupomateus.atlassian.net";
+
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const JIRA_EMAIL = process.env.JIRA_EMAIL;
+const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN;
+const JIRA_BASE_URL = process.env.JIRA_BASE_URL || "https://grupomateus.atlassian.net";
+
+// 🔎 Verifica se as variáveis obrigatórias foram configuradas
+const requiredEnv = {
+  TELEGRAM_TOKEN,
+  TELEGRAM_CHAT_ID,
+  JIRA_EMAIL,
+  JIRA_API_TOKEN
+};
+
+for (const [name, value] of Object.entries(requiredEnv)) {
+  if (!value) {
+    throw new Error(`Variável de ambiente obrigatória não configurada: ${name}`);
+  }
+}
 
 // 🧠 Armazena chamados monitorados
 let monitorados = {};
