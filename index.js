@@ -84,6 +84,22 @@ async function getJiraTicketStatus(issueKey) {
     const response = await axios.get(url, { headers });
     const data = response.data;
 
+    console.log("🔎 CAMPOS DO CHAMADO", issueKey);
+
+    if (Array.isArray(data.requestFieldValues)) {
+      for (const campo of data.requestFieldValues) {
+        console.log(
+          JSON.stringify({
+            fieldId: campo.fieldId,
+            label: campo.label,
+            value: campo.value,
+            renderedValue: campo.renderedValue
+          }, null, 2)
+        );
+      }
+    } else {
+      console.log("⚠️ requestFieldValues não encontrado ou não é uma lista");
+    }
     return {
       summary: data.summary || "Sem título",
       status: data.currentStatus?.status || "Desconhecido",
